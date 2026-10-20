@@ -1,0 +1,6 @@
+torch>=2.1
+transformers>=4.43
+datasets>=2.18
+numpy
+matplotlib
+packaging
