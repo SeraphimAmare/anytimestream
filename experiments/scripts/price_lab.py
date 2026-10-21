@@ -32,6 +32,29 @@ import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 PROBE_FRACS = (0.1, 0.2, 0.4)
+REF_TOPK = int(os.environ.get("REF_TOPK", "0"))   # >0: keep only the reference's top-k tokens (large vocabularies)
+
+
+def kl_to_ref(ref, lp):
+    """KL(reference || current) per token. ref is a full log-prob tensor, or (top-k log-probs, top-k ids):
+    then the KL is that of the two distributions coarsened to the top-k tokens plus one 'rest' bucket,
+    a lower bound that is tight when the top-k covers almost all of the reference mass."""
+    if not isinstance(ref, tuple):
+        return (ref.exp() * (ref - lp)).sum(-1)
+    lpk, idx = ref
+    lqk = lp.gather(-1, idx)
+    pk = lpk.exp()
+    p_rest = (1 - pk.sum(-1)).clamp_min(1e-12)
+    q_rest = (1 - lqk.exp().sum(-1)).clamp_min(1e-12)
+    return (pk * (lpk - lqk)).sum(-1) + p_rest * (p_rest.log() - q_rest.log())
+
+
+def ref_of(logits):
+    lp = F.log_softmax(logits, -1)
+    if REF_TOPK > 0:
+        v, i = lp.topk(REF_TOPK, dim=-1)
+        return (v.cpu(), i.cpu())
+    return lp.cpu()
 PER_TOKEN, SECTION = {}, [""]
 
 
@@ -48,6 +71,7 @@ def get_args():
     ap.add_argument("--flash-budgets", default="0.05,0.1,0.2", help="average share fetched from flash")
     ap.add_argument("--resident", type=float, default=0.1, help="share of each layer's neurons kept in DRAM")
     ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--quick", action="store_true", help="skip the no-gain price, oracle and capped-price rows")
     ap.add_argument("--device", default=None)
     ap.add_argument("--out", default="results/price_lab")
     return ap.parse_args()
@@ -119,7 +143,7 @@ class Lab:
     def set_data(self, batches):
         self.batches = batches
         self.plan = {}
-        self.ref = [F.log_softmax(self._logits(b), -1).cpu() for b in batches]
+        self.ref = [ref_of(self._logits(b)) for b in batches]
 
     @torch.no_grad()
     def _logits(self, b):
@@ -244,10 +268,11 @@ class Lab:
             self.used = torch.zeros(n, device=self.device)
             self.cost_kept = torch.zeros(n, device=self.device)
             self.cost_fetch = torch.zeros(n, device=self.device)
-            ref = ref.to(self.device)
+            ref = tuple(x.to(self.device) for x in ref) if isinstance(ref, tuple) else ref.to(self.device)
             lp = F.log_softmax(self._logits(b), -1)
-            kls.append((ref.exp() * (ref - lp)).sum(-1).flatten().clamp_min(0))
-            agree.append((ref.argmax(-1) == lp.argmax(-1)).float().flatten())
+            kls.append(kl_to_ref(ref, lp).flatten().clamp_min(0))
+            top = ref[1][..., 0] if isinstance(ref, tuple) else ref.argmax(-1)
+            agree.append((top == lp.argmax(-1)).float().flatten())
             rhos.append(torch.stack([self.rho.get(l, torch.zeros_like(kls[-1])) for l in range(self.L)]))
             orths.append(torch.stack([self.orth.get(l, torch.ones_like(kls[-1])) for l in range(self.L)]))
             kept.append(self.cost_kept / (self.L * self.d_ff))
@@ -373,6 +398,8 @@ def main():
         init = price_at(samples, gains, B)[0]
         lam, _, r = calibrate(lab, lambda x: {"kind": "thr", "lam": x}, B, "kept", init)
         rows.append(summarize(r, "price", B) | {"lam": lam})
+        if args.quick:
+            continue
         init = price_at(samples, ones, B)[0]
         _, _, r = calibrate(lab, lambda x: {"kind": "thr", "lam": x, "gain": False}, B, "kept", init)
         rows.append(summarize(r, "price, no gains", B))
@@ -403,7 +430,7 @@ def main():
         rows.append(summarize(r, "price", Fb) | {"lam": lam})
         w = np.maximum(shares, 1e-6)
         w_suffix = np.cumsum(w[::-1])[::-1].copy()
-        for m in (0.25, 0.5, 1.0):
+        for m in (() if args.quick else (0.25, 0.5, 1.0)):
             plan = {"kind": "res_cap", "lam": lam * m, "cap": Fb * L * d_ff, "w": w, "w_suffix": w_suffix}
             rows.append(summarize(lab.run(plan), f"capped price x{m}", Fb))
         if abs(Fb - 0.1) < 1e-9:
@@ -412,7 +439,7 @@ def main():
                      summarize(lab.run({"kind": "res_topk", "frac": list(shares), "predict": True}), "static split", Fb)]
             plam, _, r = calibrate(lab, lambda x: {"kind": "res_thr", "lam": x, "predict": True}, Fb, "fetch", lam)
             prows.append(summarize(r, "price", Fb) | {"lam": plam})
-            for m in (0.25, 0.5, 1.0):
+            for m in (() if args.quick else (0.25, 0.5, 1.0)):
                 plan = {"kind": "res_cap", "lam": plam * m, "cap": Fb * L * d_ff, "w": w, "w_suffix": w_suffix,
                         "predict": True}
                 prows.append(summarize(lab.run(plan), f"capped price x{m}", Fb))

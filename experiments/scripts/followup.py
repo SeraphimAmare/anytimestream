@@ -37,7 +37,7 @@ pick = lambda f: None if f == "wikitext" else f
 n_cal, n_ev = prev["calib_tokens"] // 256, prev["eval_tokens"] // 256
 calib = P.token_chunks(tok, pick(calib_file), "train", n_cal, 256)
 evalx = P.token_chunks(tok, pick(eval_file), "test", n_ev, 256)
-split = lambda x: list(x.split(4))
+split = lambda x: list(x.split(int(os.environ.get("BATCH", "4"))))
 lab = P.Lab(model, split(calib), device)
 L, d_ff = lab.L, lab.d_ff
 gains, orth = prev["law"]["gains"], prev["law"]["orth_ratio"]
