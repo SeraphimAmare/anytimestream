@@ -1,0 +1,183 @@
+{
+ "model": "/home/claude/hf/Qwen2.5-0.5B",
+ "layers": 24,
+ "d_ff": 4864,
+ "calib_tokens": 2048,
+ "eval_tokens": 3072,
+ "law": {
+  "gains": [
+   0.002643,
+   0.1552,
+   0.1884,
+   0.1853,
+   0.1699,
+   0.1953,
+   0.2339,
+   0.2349,
+   0.2769,
+   0.293,
+   0.3313,
+   0.2969,
+   0.3253,
+   0.3442,
+   0.3562,
+   0.376,
+   0.3517,
+   0.4479,
+   0.4742,
+   0.4933,
+   0.4647,
+   0.5932,
+   0.7094,
+   1.123
+  ],
+  "slopes": [
+   1.37,
+   1.9,
+   1.73,
+   1.32,
+   1.33,
+   1.35,
+   1.29,
+   1.24,
+   1.35,
+   1.42,
+   1.47,
+   1.44,
+   1.4,
+   1.38,
+   1.4,
+   1.37,
+   1.46,
+   1.18,
+   1.24,
+   1.4,
+   1.4,
+   1.37,
+   2.05,
+   1.79
+  ],
+  "orth_ratio": [
+   1.13,
+   1.03,
+   1.03,
+   1.07,
+   1.07,
+   1.14,
+   1.1,
+   1.08,
+   1.11,
+   1.06,
+   1.07,
+   1.03,
+   1.02,
+   1.01,
+   1.01,
+   1.05,
+   1.1,
+   1.03,
+   1.03,
+   1.11,
+   1.11,
+   1.08,
+   1.03,
+   1.73
+  ],
+  "r2": 0.162
+ },
+ "additive": [
+  {
+   "budget": 0.1,
+   "measured": 1.2775,
+   "predicted": 0.4191,
+   "log_corr": 0.2
+  },
+  {
+   "budget": 0.2,
+   "measured": 0.4147,
+   "predicted": 0.1711,
+   "log_corr": 0.08
+  },
+  {
+   "budget": 0.3,
+   "measured": 0.1829,
+   "predicted": 0.0825,
+   "log_corr": 0.05
+  }
+ ],
+ "compute": [
+  {
+   "budget": 0.1,
+   "policy": "uniform",
+   "kl": 1.2775,
+   "top1": 0.47700000000000004,
+   "kept": 0.1,
+   "kept_max": 0.1
+  },
+  {
+   "budget": 0.1,
+   "policy": "static split",
+   "kl": 1.2105,
+   "top1": 0.49200000000000005,
+   "kept": 0.1,
+   "kept_max": 0.1
+  },
+  {
+   "budget": 0.1,
+   "policy": "price",
+   "kl": 1.1494,
+   "top1": 0.504,
+   "kept": 0.101,
+   "kept_max": 0.163
+  },
+  {
+   "budget": 0.2,
+   "policy": "uniform",
+   "kl": 0.4147,
+   "top1": 0.682,
+   "kept": 0.2,
+   "kept_max": 0.2
+  },
+  {
+   "budget": 0.2,
+   "policy": "static split",
+   "kl": 0.3927,
+   "top1": 0.685,
+   "kept": 0.2,
+   "kept_max": 0.2
+  },
+  {
+   "budget": 0.2,
+   "policy": "price",
+   "kl": 0.4038,
+   "top1": 0.6859999999999999,
+   "kept": 0.199,
+   "kept_max": 0.292
+  },
+  {
+   "budget": 0.3,
+   "policy": "uniform",
+   "kl": 0.1829,
+   "top1": 0.7829999999999999,
+   "kept": 0.3,
+   "kept_max": 0.3
+  },
+  {
+   "budget": 0.3,
+   "policy": "static split",
+   "kl": 0.1811,
+   "top1": 0.7809999999999999,
+   "kept": 0.3,
+   "kept_max": 0.3
+  },
+  {
+   "budget": 0.3,
+   "policy": "price",
+   "kl": 0.1872,
+   "top1": 0.764,
+   "kept": 0.298,
+   "kept_max": 0.395
+  }
+ ],
+ "note": "rebuilt from logs/price_lab_qwen05.log; the run was stopped by a container restart before the flash section, so results.json was not written"
+}

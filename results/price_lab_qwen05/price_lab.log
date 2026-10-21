@@ -1,0 +1,47 @@
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<01:33,  3.09it/s]Loading weights:  47%|████▋     | 135/290 [00:00<00:00, 407.13it/s]Loading weights:  73%|███████▎  | 211/290 [00:00<00:00, 454.38it/s]Loading weights:  96%|█████████▌| 277/290 [00:00<00:00, 489.51it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 409.79it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (2518423 > 131072). Running this sequence through the model will result in indexing errors
+/home/claude/hf/Qwen2.5-0.5B: 24 layers, d_ff=4864, calibration 2048 tokens, evaluation 3072 tokens
+
+LAW  R^2 0.162   median slope 1.39 (theory 2)   gain spread 424.9x
+  layer  0  gain   0.002643  slope  1.37  ||delta||^2 / sum s^2 = 1.13
+  layer  1  gain     0.1552  slope  1.90  ||delta||^2 / sum s^2 = 1.03
+  layer  2  gain     0.1884  slope  1.73  ||delta||^2 / sum s^2 = 1.03
+  layer  3  gain     0.1853  slope  1.32  ||delta||^2 / sum s^2 = 1.07
+  layer  4  gain     0.1699  slope  1.33  ||delta||^2 / sum s^2 = 1.07
+  layer  5  gain     0.1953  slope  1.35  ||delta||^2 / sum s^2 = 1.14
+  layer  6  gain     0.2339  slope  1.29  ||delta||^2 / sum s^2 = 1.10
+  layer  7  gain     0.2349  slope  1.24  ||delta||^2 / sum s^2 = 1.08
+  layer  8  gain     0.2769  slope  1.35  ||delta||^2 / sum s^2 = 1.11
+  layer  9  gain      0.293  slope  1.42  ||delta||^2 / sum s^2 = 1.06
+  layer 10  gain     0.3313  slope  1.47  ||delta||^2 / sum s^2 = 1.07
+  layer 11  gain     0.2969  slope  1.44  ||delta||^2 / sum s^2 = 1.03
+  layer 12  gain     0.3253  slope  1.40  ||delta||^2 / sum s^2 = 1.02
+  layer 13  gain     0.3442  slope  1.38  ||delta||^2 / sum s^2 = 1.01
+  layer 14  gain     0.3562  slope  1.40  ||delta||^2 / sum s^2 = 1.01
+  layer 15  gain      0.376  slope  1.37  ||delta||^2 / sum s^2 = 1.05
+  layer 16  gain     0.3517  slope  1.46  ||delta||^2 / sum s^2 = 1.10
+  layer 17  gain     0.4479  slope  1.18  ||delta||^2 / sum s^2 = 1.03
+  layer 18  gain     0.4742  slope  1.24  ||delta||^2 / sum s^2 = 1.03
+  layer 19  gain     0.4933  slope  1.40  ||delta||^2 / sum s^2 = 1.11
+  layer 20  gain     0.4647  slope  1.40  ||delta||^2 / sum s^2 = 1.11
+  layer 21  gain     0.5932  slope  1.37  ||delta||^2 / sum s^2 = 1.08
+  layer 22  gain     0.7094  slope  2.05  ||delta||^2 / sum s^2 = 1.03
+  layer 23  gain      1.123  slope  1.79  ||delta||^2 / sum s^2 = 1.73
+
+ADDITIVE  (all layers at a uniform share)
+  10%: measured KL 1.2775  predicted 0.4191  per-token log-corr 0.20
+  20%: measured KL 0.4147  predicted 0.1711  per-token log-corr 0.08
+  30%: measured KL 0.1829  predicted 0.0825  per-token log-corr 0.05
+
+COMPUTE  (budget = average share of FFN neurons computed)
+  budget               policy        KL vs uniform   top-1  kept mean  kept max
+     10%              uniform    1.2775      +0.0%   47.7%      0.100     0.100
+     10%         static split    1.2105      +5.2%   49.2%      0.100     0.100
+     10%                price    1.1494     +10.0%   50.4%      0.101     0.163
+     20%              uniform    0.4147      +0.0%   68.2%      0.200     0.200
+     20%         static split    0.3927      +5.3%   68.5%      0.200     0.200
+     20%                price    0.4038      +2.6%   68.6%      0.199     0.292
+     30%              uniform    0.1829      +0.0%   78.3%      0.300     0.300
+     30%         static split    0.1811      +1.0%   78.1%      0.300     0.300
+     30%                price    0.1872      -2.4%   76.4%      0.298     0.395
