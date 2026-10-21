@@ -131,6 +131,8 @@ def main():
     ap.add_argument("--jitter", type=float, default=0.3)
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--batch", type=int, default=4, help="sequences per forward pass")
+    ap.add_argument("--shard", type=int, default=0, help="evaluate shard k of --nshards (pooled later)")
+    ap.add_argument("--nshards", type=int, default=1)
     ap.add_argument("--no-layer-split", action="store_true", help="skip 'unified-layers' (saves memory)")
     ap.add_argument("--device", default=None)
     ap.add_argument("--out", required=True)
@@ -141,7 +143,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     model, tok, device = P.load(args)
     calib = P.token_chunks(tok, args.calib_file, "train", args.calib_seqs, args.seq_len)
-    evalx = P.token_chunks(tok, args.eval_file, "test", args.eval_seqs, args.seq_len)
+    evalx = P.token_chunks(tok, args.eval_file, "test", args.eval_seqs * args.nshards, args.seq_len)[args.shard::args.nshards]
     lab = TakeLab(model, list(calib.split(args.batch)), device)
     L, d_ff, T = lab.L, lab.d_ff, args.seq_len
     gains = json.load(open(args.law))["law"]["gains"]
@@ -207,7 +209,7 @@ def main():
     S = np.concatenate(srt)                                      # [n_tok, L*d_ff], descending
     del srt
     n_target, n_cap = args.target * N, int(args.cap * N)
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(args.shard)
     n_seq = evalx.shape[0]
     taus = [flash_times(rng, T, 1.0, args.p_enter, args.p_exit, args.slow, args.jitter) for _ in range(n_seq)]
     mean_tau = float(np.mean(np.concatenate(taus)))
