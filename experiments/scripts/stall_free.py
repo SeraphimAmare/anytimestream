@@ -131,6 +131,7 @@ def main():
     ap.add_argument("--jitter", type=float, default=0.3)
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--batch", type=int, default=4, help="sequences per forward pass")
+    ap.add_argument("--no-layer-split", action="store_true", help="skip 'unified-layers' (saves memory)")
     ap.add_argument("--device", default=None)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -187,18 +188,24 @@ def main():
     # per-token neuron values on the evaluation text (idealized predictor, as in price_lab.py);
     # resident neurons are free and excluded. Sorted descending per token.
     lab.store, lab.capture = [], True
-    vals = []
+    vals, srt = [], []
     with torch.no_grad():
         for b in lab.batches:
             lab.store = []
             lab._logits(b)
             v = torch.stack(lab.store, 1)                        # [tok, L, d_ff]
-            v = v.masked_fill(lab.resident.unsqueeze(0), 0.0)
-            vals.append(v.half().cpu())
+            v = v.masked_fill(lab.resident.unsqueeze(0), 0.0).cpu()
+            lab.store = []
+            for c in v.split(64):                                # sort in chunks to bound memory
+                srt.append(c.flatten(1).sort(dim=1, descending=True).values.numpy())
+            if not args.no_layer_split:
+                vals.append(v)
+            del v
     lab.capture = False
     del lab.store
-    V = torch.cat(vals)                                          # [n_tok, L, d_ff]
-    S = V.flatten(1).float().sort(dim=1, descending=True).values.numpy()   # [n_tok, L*d_ff]
+    V = torch.cat(vals) if vals else None                        # [n_tok, L, d_ff] (float32)
+    S = np.concatenate(srt)                                      # [n_tok, L*d_ff], descending
+    del srt
     n_target, n_cap = args.target * N, int(args.cap * N)
     rng = np.random.default_rng(0)
     n_seq = evalx.shape[0]
@@ -221,8 +228,9 @@ def main():
     lam = float(np.exp((lo + hi) / 2))
     flat_tau = np.concatenate(taus)                                    # token order = sequence-major, like S
     def n_unified(mu):
-        thr = mu * flat_tau
-        return np.minimum(n_cap, (S >= thr[:, None]).sum(1))
+        thr = (mu * flat_tau).astype(np.float32)
+        cnt = np.concatenate([(S[i:i + 128] >= thr[i:i + 128, None]).sum(1) for i in range(0, len(S), 128)])
+        return np.minimum(n_cap, cnt)
     lo2, hi2 = -40.0, 10.0
     for _ in range(80):
         mid = (lo2 + hi2) / 2
@@ -234,7 +242,8 @@ def main():
     out = {"args": vars(args), "period": Pd, "curve": {"levels": levels.tolist(), "kl": curve},
            "lambda": lam, "rows": []}
     per_token = {}
-    for policy in ("fixed", "greedy", "steady", "price", "unified", "unified-layers", "wait-all"):
+    policies = ["fixed", "greedy", "steady", "price", "unified"] + ([] if args.no_layer_split else ["unified-layers"])
+    for policy in policies + ["wait-all"]:
         counts, stalls, lateness, fins = [], 0, [], []
         for s in range(n_seq):
             want = n_uni[s] if policy.startswith("unified") else n_of(lam, taus[s])
@@ -251,7 +260,8 @@ def main():
         if policy == "unified-layers":
             # each token splits its fetches across layers by its own values: its n-th largest value is the cut
             cut = S[np.arange(len(flat)), np.maximum(flat - 1, 0)]
-            per_layer = (V.float() >= torch.from_numpy(cut).float()[:, None, None]).sum(2).T.numpy()
+            cutt = torch.from_numpy(cut).float()
+            per_layer = torch.cat([(V[i:i + 128] >= cutt[i:i + 128, None, None]).sum(2) for i in range(0, len(V), 128)]).T.numpy()
             per_layer = np.where(flat[None, :] > 0, per_layer, 0).astype(np.int64)
         else:
             per_layer = np.minimum(np.floor(flat[None, :] * w[:, None]), room[:, None]).astype(np.int64)  # [L, seq*T]
