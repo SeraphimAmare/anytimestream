@@ -21,7 +21,10 @@ is too soon.
 - [x] Token-level reservation against consumption deadlines, with tests
 - [x] Stall-free policies with quality measured on the model (fixed, greedy, steady, price, unified)
 - [x] RAM residency by frequency, damage and hybrid
-- [ ] Qwen2.5-0.5B: law, residency, stall-free (running)
+- [x] Qwen2.5-0.5B: law, compute split, residency, stall-free (32 sequences)
+- [ ] Stronger mandatory part: a low-bit or low-rank copy of each FFN kept in RAM, since static RAM
+      neurons alone give an unusable floor on Qwen (KL 5 to 8.5)
+- [ ] Better per-token neuron values than the damage law (R² 0.16 on Qwen), e.g. calibrated per layer
 - [ ] Unified price from predicted (not true) neuron values
 - [ ] Free-running generation under the token scheduler
 - [ ] Flash traces measured on a phone or Jetson instead of the two-state model

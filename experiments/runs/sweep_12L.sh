@@ -1,7 +1,7 @@
 #!/bin/sh
 R=/home/claude/research
 cd /home/claude/anytimestream
-run() { name=$1; shift; python3 experiments/scripts/stall_free.py --model $R/models/gutenberg-12L --calib-file $R/data/gutenberg/austen-persuasion.txt --eval-file $R/data/gutenberg/carroll-alice.txt --law results/price_lab_12L/results.json --resident uniform-freq --threads 1 --out results/stall_free_sweep/$name "$@" > logs/sweep_$name.log 2>&1; }
+run() { name=$1; shift; python3 experiments/scripts/stall_free.py --model $R/models/gutenberg-12L --calib-file $R/data/gutenberg/austen-persuasion.txt --eval-file $R/data/gutenberg/carroll-alice.txt --law results/price_lab_12L/results.json --resident uniform-freq --threads 2 --out results/stall_free_sweep/$name "$@" > logs/sweep_$name.log 2>&1; }
 run slow1 --slow 1
 run slow2 --slow 2
 run slow8 --slow 8

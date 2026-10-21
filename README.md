@@ -37,14 +37,26 @@ model are simulated, and quality (KL to the dense model) is measured on the mode
 
 | Test | Result |
 |---|---|
-| Unified price vs fixed per-token deadline, same average time per token | p99 KL -17.6% (95% CI -10.7 to -21.6%), p90 -9.8%, mean -3.1%; 0 stalls for both |
+| Unified price vs fixed per-token deadline, same average time per token | p99 KL -17.0% (95% CI -10.6 to -21.7%), p90 -9.8%, mean -3.1%; 0 stalls for both |
 | No cutoff, same average time (LeanStream-style) | Late on 41% of tokens, up to 38 periods behind |
 | Gain vs burstiness of flash (slowdown 1x / 2x / 4x / 8x) | p99 -1% / -8% / -18% / -23% |
 | Gain vs budget (5% / 10% / 20% of neurons fetched) | p99 -7% / -18% / -39% |
 | RAM residency, 10% of neurons, RAM only | KL 3.44 by frequency, 0.79 by damage, 0.83 hybrid (half each) |
 | Same, plus 10% flash reads | 0.0692 by frequency, 0.0757 by damage, 0.0698 hybrid |
 
-Real-model results on Qwen2.5-0.5B are in progress (`experiments/runs/run_qwen.sh`).
+**Qwen2.5-0.5B, WikiText-2** (32 evaluation sequences in 4 shards; `experiments/runs/`).
+
+| Test | Result |
+|---|---|
+| Unified price vs fixed per-token deadline | p99 KL -7.1% (95% CI -1.2 to -13.4%); mean -1.5% and p90 +1.0%, both not significant; 0 stalls |
+| No cutoff, same average time | Late on 44% of tokens, up to 28 periods behind; mean KL 17% worse than the fixed deadline |
+| Damage law (one layer cut at a time) | Loose per token: R² 0.16, median slope 1.39 (theory 2); gains rise with depth, last layer highest |
+| Fixed per-layer split vs equal shares (known idea) | -5.2% / -5.3% / -1.0% KL at 10% / 20% / 30% compute |
+| RAM residency, 10% of neurons, RAM only | KL 8.53 by frequency, 4.97 hybrid: both too weak to promise useful quality |
+
+On the real model the guarantee holds and the tail improves, but less than on the toy model, because
+the damage law ranks neurons only roughly. The next steps are better per-token neuron values, and a
+stronger mandatory part, such as a compressed copy of each layer in RAM.
 
 Caveats: flash timing is simulated with a bursty two-state model, the predictor is idealized (true
 neuron values), and quality is measured teacher-forced. `ROADMAP.md` lists how each gets tested.
