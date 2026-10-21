@@ -1,67 +1,76 @@
 # AnytimeStream
 
-**Deadline-guaranteed decoding for flash-streamed LLMs, with sensitivity-budgeted layers.**
+**Stall-free anytime decoding for flash-streamed on-device LLMs.**
 Undergraduate research by Seraphim Amare at George Mason University, with Prof. Shuochao Yao.
-It builds on the lab's LeanStream (MobiCom 2026).
+It builds on the lab's LeanStream (MobiCom 2026) and on Yao et al.'s real-time DNNs as imprecise
+computations.
 
-LeanStream makes on-device LLMs fast on average by streaming feed-forward weights from flash.
-AnytimeStream makes every token meet a hard deadline. It then spends the leftover time where it
-buys the most quality: across layers, in proportion to how fragile each layer is, measured once per model.
+People read or listen to generated text at a steady pace, so a token only has to be ready when the
+person reaches it. AnytimeStream treats decoding as a hierarchical imprecise computation:
 
-## The three parts
+- **mandatory:** the FFN neurons already in RAM, which never wait on flash
+- **optional:** the neurons streamed from flash, fetched while time remains
 
-1. **Reservation guarantee** (`anytimestream/scheduler.py`). Each layer's mandatory work uses only
-   weights already in RAM, and time for every remaining layer's mandatory work is reserved first.
-   Flash reads that miss a layer's cutoff are abandoned. So no token is late, however slow flash is
-   or however wrong the predictor is. `tests/test_scheduler.py` checks this against 5,000 random cases
-   with heavy-tailed and lost reads.
-2. **Per-layer budget table** (`anytimestream/budget_table.py`, `scripts/build_budget_table.py`).
-   Each layer's fragility is measured once, using the damage law KL ≈ G_l·ρ_l². That gives a split
-   of the spare budget at each budget level, stored as a small JSON table.
-3. **Cache-aware costs.** In flash mode, neurons already resident in RAM cost nothing. Only flash
-   reads count against the budget.
+A two-level reservation guarantees that no token is late, whatever flash does. Within that
+guarantee, one price for quality decides which neurons are worth fetching, across tokens and layers.
 
-Not claimed: re-splitting the budget for every token. In the experiments below it lost to the fixed
-table, even as an oracle with perfect hindsight.
+## What is new, and what is not
 
-## Results so far (10.1M-parameter, 12-layer Qwen2-architecture model)
+A literature check (October 2026) found that splitting the budget across layers by sensitivity is
+prior art (TEAL, ICLR 2025; SpAx and TopK-Guided, 2026), so it is used here as an ingredient, not
+claimed. The contributions are:
+
+1. **Consumption deadlines with a hard guarantee** (`anytimestream/stream.py` + `scheduler.py`). Before
+   token t starts, its optional time is capped at its due time minus the mandatory time. If the
+   mandatory time fits in one consumption period, no token stalls, even when flash reads are slow,
+   lost or non-preemptive. `tests/` checks both levels against random and heavy-tailed timings.
+2. **One price for quality across tokens** (`experiments/scripts/stall_free.py`, policy `unified`). A
+   neuron of token t is fetched if its predicted value is worth `mu * tau_t`, its current flash cost.
+   Hard tokens get more neurons and easy ones bank time. A fixed per-token deadline cannot do this.
+3. **Designing the mandatory part** (`experiments/scripts/residency.py`). Choosing what stays in RAM
+   by expected damage rather than activation frequency sets the quality floor the guarantee can promise.
+
+## Results so far
+
+**12-layer, 10.1M-parameter Qwen2-architecture model, tested on *Alice*.** The deadline and flash
+model are simulated, and quality (KL to the dense model) is measured on the model itself.
 
 | Test | Result |
 |---|---|
-| One layer at a time cut to 20% | Layer 0 is 18x as fragile as layer 2; the last layer is 9x |
-| Damage law | KL grows as ρ^2 (fitted exponent 1.93 to 2.18 in 11 of 12 layers) |
-| Fixed split vs equal shares | 5 to 10% lower KL at equal compute; 8 to 24% at equal flash reads |
-| Per-token re-split (oracle) | 3 to 4% worse than the fixed split |
-| Deadline simulator | 12 to 27% lower KL at deadlines up to 2.2 ms, 0 missed deadlines; waiting for every weight missed over 99% up to 4.2 ms |
+| Unified price vs fixed per-token deadline, same average time per token | p99 KL -17.6% (95% CI -10.7 to -21.6%), p90 -9.8%, mean -3.1%; 0 stalls for both |
+| No cutoff, same average time (LeanStream-style) | Late on 41% of tokens, up to 38 periods behind |
+| Gain vs burstiness of flash (slowdown 1x / 2x / 4x / 8x) | p99 -1% / -8% / -18% / -23% |
+| Gain vs budget (5% / 10% / 20% of neurons fetched) | p99 -7% / -18% / -39% |
+| RAM residency, 10% of neurons, RAM only | KL 3.44 by frequency, 0.79 by damage, 0.83 hybrid (half each) |
+| Same, plus 10% flash reads | 0.0692 by frequency, 0.0757 by damage, 0.0698 hybrid |
 
-Caveats: this is a toy model, KL is measured teacher-forced, the simulator's timings are not
-calibrated, and the predictor is idealized. In 2 of 3 compute-only tests, a simple rule (double the
-first and last layers) beat the split. See `ROADMAP.md` for how each caveat gets tested.
+Real-model results on Qwen2.5-0.5B are in progress (`experiments/runs/run_qwen.sh`).
+
+Caveats: flash timing is simulated with a bursty two-state model, the predictor is idealized (true
+neuron values), and quality is measured teacher-forced. `ROADMAP.md` lists how each gets tested.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| `anytimestream/` | The runtime pieces: reservation scheduler, budget table |
-| `scripts/build_budget_table.py` | Builds a model's budget table (compute and flash modes) |
-| `scripts/demo_guarantee.py` | Waiting for every weight vs reservation, under heavy-tailed flash (illustrative timings) |
-| `tests/` | Deadline-guarantee tests (`python -m pytest -q tests`) |
-| `experiments/scripts/` | The October 2026 layer-budget experiments (damage law, splits, oracle, heuristics, CIs) |
-| `experiments/kit/` | Starter kit: FFN profiler, top-k oracle, deadline co-simulator |
-| `results/` | Every number above: JSON summaries, per-token KL, plots, budget table |
+| `anytimestream/scheduler.py` | Layer-level reservation scheduler: mandatory first, reads dropped at each layer's cutoff |
+| `anytimestream/stream.py` | Token-level reservation against consumption deadlines, and the price rule |
+| `anytimestream/budget_table.py` | Per-layer budget table (the known per-layer split) |
+| `tests/` | Guarantee tests for both levels (`python -m pytest -q tests`) |
+| `experiments/scripts/stall_free.py` | Policies under reader deadlines, quality measured on the model |
+| `experiments/scripts/residency.py` | What to keep in RAM, and the guaranteed floor |
+| `experiments/scripts/price_lab.py`, `followup.py`, ... | October layer-budget experiments (damage law, splits, oracle) |
+| `experiments/runs/` | The exact command chains used for the 12-layer sweep and the Qwen runs |
+| `results/` | Every number above: JSON summaries and per-token KL |
 
-## Quick start (Windows PowerShell, venv active)
-
-```powershell
-python -m pip install torch transformers datasets matplotlib numpy packaging tokenizers pytest
-python -m pytest -q tests
-python scripts/demo_guarantee.py --table results/budget_table_12L.json
-```
-
-Build a table for a real model (GPU or Colab; WikiText-2 is used automatically):
+## Quick start
 
 ```bash
-python scripts/build_budget_table.py --model Qwen/Qwen2.5-0.5B --out results/budget_table_qwen05.json
+python -m pip install torch transformers tokenizers datasets numpy pytest
+python -m pytest -q tests
+python experiments/scripts/stall_free.py --model Qwen/Qwen2.5-0.5B --law results/price_lab_qwen05/results.json \
+    --calib-seqs 8 --eval-seqs 8 --batch 2 --out results/stall_free_qwen05
 ```
 
-To reproduce the toy-model experiments, follow `experiments/README.md`.
+For Qwen's 151,936-token vocabulary, set `REF_TOPK=1024`. The reference distributions are then kept
+as their top 1,024 tokens plus a rest bucket, which keeps memory low.
